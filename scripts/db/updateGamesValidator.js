@@ -17,66 +17,85 @@ async function main() {
       dbName: dbName && dbName.length ? dbName : undefined,
     });
 
-    const validator = {
+    const db = mongoose.connection.db;
+
+    const gameValidator = {
       $jsonSchema: {
         bsonType: "object",
         required: ["name", "genre", "cover", "rating", "status", "hoursPlayed"],
         properties: {
-          name: {
-            bsonType: "string",
-            minLength: 1,
-            description: "Game title (required)",
-          },
-          genre: {
-            bsonType: "string",
-            minLength: 1,
-            description: "Game genre (required)",
-          },
+          name: { bsonType: "string", minLength: 1 },
+          genre: { bsonType: "string", minLength: 1 },
           cover: {
             bsonType: "string",
             pattern:
               "^(https?:\\/\\/)([\\w-]+\\.)+[\\w-]+(?:\\/[\\w\\-.~:?#@!$&'()*+,;=%]*)*$",
-            description: "Cover must be a valid URL",
           },
-          rating: {
-            bsonType: ["double", "int", "long"],
-            minimum: 0,
-            maximum: 5,
-            description: "Rating between 0 and 5",
-          },
-          status: {
-            bsonType: "string",
-            minLength: 1,
-            description: "Playback status (required)",
-          },
-          hoursPlayed: {
-            bsonType: ["int", "long", "double"],
-            minimum: 0,
-            description: "Total hours played, integer >= 0",
-          },
-          createdAt: {
-            bsonType: "date",
-          },
-          updatedAt: {
-            bsonType: "date",
-          },
+          rating: { bsonType: ["double", "int", "long"], minimum: 0, maximum: 5 },
+          status: { bsonType: "string", minLength: 1 },
+          hoursPlayed: { bsonType: ["int", "long", "double"], minimum: 0 },
+          createdAt: { bsonType: "date" },
+          updatedAt: { bsonType: "date" },
         },
       },
     };
 
-    await mongoose.connection.db.command({
-      collMod: "games",
-      validator,
-      validationLevel: "strict",
-      validationAction: "error",
+    const reviewValidator = {
+      $jsonSchema: {
+        bsonType: "object",
+        required: ["gameId", "gameName", "review", "rating"],
+        properties: {
+          gameId: { bsonType: "objectId" },
+          gameName: { bsonType: "string", minLength: 1 },
+          review: { bsonType: "string", minLength: 10, maxLength: 2000 },
+          rating: { bsonType: ["double", "int", "long"], minimum: 0, maximum: 5 },
+          cover: {
+            bsonType: "string",
+            pattern:
+              "^(https?:\\/\\/)([\\w-]+\\.)+[\\w-]+(?:\\/[\\w\\-.~:?#@!$&'()*+,;=%]*)*$",
+          },
+          createdAt: { bsonType: "date" },
+          updatedAt: { bsonType: "date" },
+        },
+      },
+    };
+
+    await upsertCollection(db, "games", gameValidator);
+    await upsertCollection(db, "reviews", reviewValidator, async (collection) => {
+      await collection.createIndex({ gameId: 1, createdAt: -1 });
     });
 
-    console.log("Updated games collection validator successfully");
+    console.log("Validators synced successfully");
   } catch (error) {
     console.error("Failed to update validator", error);
     process.exitCode = 1;
   } finally {
     await mongoose.disconnect();
+  }
+}
+
+async function upsertCollection(db, name, validator, onCollectionReady) {
+  const exists = await db.listCollections({ name }).hasNext();
+  if (!exists) {
+    await db.createCollection(name, {
+      validator,
+      validationLevel: "strict",
+      validationAction: "error",
+    });
+    console.log(`Created ${name} collection with validator`);
+  } else {
+    await db.command({
+      collMod: name,
+      validator,
+      validationLevel: "strict",
+      validationAction: "error",
+    });
+    console.log(`Updated ${name} collection validator`);
+  }
+
+  if (onCollectionReady) {
+    const collection = db.collection(name);
+    await onCollectionReady(collection);
   }
 }
 

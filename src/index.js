@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import express from "express";
 import morgan from "morgan";
 import gamesRouter from "./routes/game.routes.js";
+import reviewsRouter from "./routes/review.routes.js";
 import { errorHandler, notFound } from "./middlewares/errorHandler.js";
 import { connectDB } from "./config/db.js";
 
@@ -26,6 +27,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api/games", gamesRouter);
+app.use("/api/reviews", reviewsRouter);
 
 app.use(notFound);
 app.use(errorHandler);

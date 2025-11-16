@@ -1,5 +1,6 @@
 import createHttpError from "http-errors";
 import { Game } from "../models/game.model.js";
+import { Review } from "../models/review.model.js";
 
 function normalizePayload(payload) {
   const normalized = { ...payload };
@@ -72,6 +73,7 @@ export async function deleteGame(req, res) {
   if (!deleted) {
     throw createHttpError(404, "Game not found");
   }
+  await Review.deleteMany({ gameId: deleted._id });
   res.status(204).send();
 }
 
